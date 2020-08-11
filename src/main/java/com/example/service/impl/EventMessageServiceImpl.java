@@ -34,8 +34,6 @@ public class EventMessageServiceImpl implements EventMessageService {
 		EventMessageDetail msgDtl = new EventMessageDetail(eventMessage.getId(), 
         		eventMessage.getDescription().toUpperCase().startsWith("ERROR")?"CRITICAL":"MEDIUM");
 		eventMessageDetailDao.insert(msgDtl);
-		if(eventMessage.getDescription().toUpperCase().startsWith("JMSERR"))
-			throw new RuntimeException("Message Error: JMSERR");
 		messagingService.sendMessage(eventMessage);	return rowsUpdated;
 	}
 

@@ -49,7 +49,8 @@ public class MessagingServiceImpl implements MessagingService{
 	@Override
 	public void sendMessage(EventMessage eventMessage) {
 		JmsTemplate jmsTemplate = appContext.getBean(JmsTemplate.class);
-
+		if(eventMessage.getDescription().toUpperCase().startsWith("JMSERR"))
+			throw new RuntimeException("Message Error: JMSERR");
 	    // Send a message with a POJO - the template reuse the message converter
 	    logger.info("JMS Sending message: " + eventMessage);
 	    jmsTemplate.convertAndSend("messagedestination", eventMessage);

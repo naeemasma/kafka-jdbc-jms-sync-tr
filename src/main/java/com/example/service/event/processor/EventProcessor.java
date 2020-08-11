@@ -161,7 +161,7 @@ public class EventProcessor {
 	    
     @KafkaListener(topics = "${app.consumer.publish-to.topic}", containerFactory="kafkaListenerContainerFactory", groupId = "${app.consumer.group-id}")
     public void listenConsumerPublishedTopic(EventMessage eventMessage) {
-      logger.info(String.format("Recieved in topic, published by the event processor consumer: ->%s", eventMessage));
+      logger.info(String.format("Recieved in topic %s: %s", topicToPublish, eventMessage));
     }
     
     @KafkaListener(topics = "${app.dlt.topic}", containerFactory="kafkaListenerContainerFactory", groupId = "${app.consumer.group-id}")

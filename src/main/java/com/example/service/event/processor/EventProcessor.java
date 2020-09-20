@@ -16,6 +16,7 @@ import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultAfterRollbackProcessor;
 import org.springframework.kafka.support.converter.RecordMessageConverter;
 import org.springframework.kafka.support.converter.StringJsonMessageConverter;
@@ -76,6 +77,9 @@ public class EventProcessor {
 
 	@Value("${app.producer.sub-batch-per-partition}")
 	private boolean subBatchPerPartition; 
+		
+	@Value("${app.consumer.eos-mode}")
+	private String eosMode;
 	
 	@Value("${app.producer.client-id}")
 	private String producerClientId;
@@ -131,6 +135,7 @@ public class EventProcessor {
 		  ConcurrentKafkaListenerContainerFactory<Object, Object>
 		  factory = new ConcurrentKafkaListenerContainerFactory<>();
 		  configurer.configure(factory, kafkaConsumerFactory);
+		  factory.getContainerProperties().setEosMode(ContainerProperties.EOSMode.valueOf(eosMode));
 		  factory.getContainerProperties().setTransactionManager(chainedTM);
 		  template.setTransactionIdPrefix(this.transactionIdPrefix);
 		  factory.setAfterRollbackProcessor(new DefaultAfterRollbackProcessor<Object, Object>((record, exception) -> {

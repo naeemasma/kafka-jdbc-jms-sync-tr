@@ -4,6 +4,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
@@ -66,32 +67,18 @@ public class EventProcessor {
 	@Value("${app.dlt.topic}")
 	private String dltTopic;
 	
-	@Value("${spring.kafka.producer.transaction-id-prefix}")
-	private String transactionIdPrefix;
-	
-	@Value("${spring.kafka.producer.bootstrap-servers}")
-	private String producer_bootstrap_servers;
-	
-	@Value("${app.producer.producer-per-consumer-partition}")
-	private boolean producerPerConsumerPartition;	
-
 	@Value("${app.consumer.sub-batch-per-partition}")
 	private boolean subBatchPerPartition; 
 		
 	@Value("${app.consumer.eos-mode}")
 	private String eosMode;
-	
-	@Value("${app.producer.client-id}")
-	private String producerClientId;
-	
-	@Value("${spring.kafka.producer.key-serializer}")
-	private String keySerializer; 
-	
-	@Value("${spring.kafka.producer.value-serializer}")
-	private String valueSerializer; 
 		
 	@Autowired
     private KafkaTemplate<Object, Object> kafkaTemplate;
+	
+	@Autowired
+	@Qualifier("standaloneTransactionKafkaTemplate")
+    private KafkaTemplate<Object, Object> standaloneTransactionKafkaTemplate;
 			
 	@Autowired
     EventMessageService eventMessageService;
@@ -108,7 +95,7 @@ public class EventProcessor {
             KafkaTransactionManager<String, String> ktm,
             DataSourceTransactionManager dstm,
             JmsTransactionManager jtm) {
-    	ktm.setTransactionIdPrefix(this.transactionIdPrefix);        
+    	logger.info(String.format("ktm.transactionIdPrefix: %s", ktm.getProducerFactory().getTransactionIdPrefix()));
         return new ChainedKafkaTransactionManager<>(ktm, dstm, jtm);
     }
 
@@ -138,7 +125,6 @@ public class EventProcessor {
 		  factory.getContainerProperties().setEosMode(ContainerProperties.EOSMode.valueOf(eosMode));
 		  factory.getContainerProperties().setSubBatchPerPartition(subBatchPerPartition);
 		  factory.getContainerProperties().setTransactionManager(chainedTM);
-		  template.setTransactionIdPrefix(this.transactionIdPrefix);
 		  factory.setAfterRollbackProcessor(new DefaultAfterRollbackProcessor<Object, Object>((record, exception) -> {
 			   template.executeInTransaction(kTemplate ->{
 		    	try {
@@ -178,7 +164,6 @@ public class EventProcessor {
 		  factory = new ConcurrentKafkaListenerContainerFactory<>();
 		  configurer.configure(factory, kafkaConsumerFactory);
 		  factory.getContainerProperties().setTransactionManager(chainedTM);
-		  template.setTransactionIdPrefix(this.transactionIdPrefix);
 		  factory.setAfterRollbackProcessor(new DefaultAfterRollbackProcessor<Object, Object>((record, exception) -> {
 			template.executeInTransaction(kTemplate ->{
 	    	try {
@@ -198,7 +183,8 @@ public class EventProcessor {
 	  
 	@KafkaListener(topics = "#{'${app.consumer.subscribed-to.topic}'.split(',')}", containerFactory="kafkaListenerContainerFactory", groupId = "${spring.kafka.consumer.group-id}")
 	public void consume(EventMessage eventMessage) throws Exception {
-	  logger.info(String.format("Consumed message: %s", eventMessage));
+	  logger.info(String.format("Consuming message: %s -kafkaTemplate: %s", 
+			  eventMessage.getDescription(), kafkaTemplate.getTransactionIdPrefix()));
 	  EventMessage msg = new EventMessage(eventMessage.getDescription()+"");
 	  eventMessageService.insert(msg);
 	  this.kafkaTemplate.send(topicToPublish,eventMessage);
@@ -223,12 +209,12 @@ public class EventProcessor {
     }
     
     public void sendEventMessage(String topic, String input) {
-    	this.kafkaTemplate.executeInTransaction(kTemplate -> {
+    	standaloneTransactionKafkaTemplate.executeInTransaction(kTemplate -> {
     	    StringUtils.commaDelimitedListToSet(input).stream()
     	      .map(s -> new EventMessageTypeTwo(s))
     	      .forEach(evtMsg -> {
-    	    	  logger.info(String.format("Producing message: %s - TransactionIdPrefix: %s", 
-    	    			  evtMsg.getDescription(), kafkaTemplate.getTransactionIdPrefix()));
+    	    	  logger.info(String.format("Producing message: %s - standaloneTransactionKafkaTemplate: %s", 
+    	    			  evtMsg.getDescription(), standaloneTransactionKafkaTemplate.getTransactionIdPrefix()));
     	    	  if (evtMsg.getDescription().toUpperCase().startsWith("PRODUCER_ERROR")) {
     	    		    throw new RuntimeException("ProducerError");
     	    		  }
@@ -236,23 +222,5 @@ public class EventProcessor {
     	    	  });
     	    return null;
     	  });
-    }
-
-    @Bean
-    public Map<String, Object> producerConfigs() throws ClassNotFoundException {
-        Map<String, Object> props = new HashMap<>();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, producer_bootstrap_servers);
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, Class.forName(valueSerializer));
-        props.put(ProducerConfig.CLIENT_ID_CONFIG,producerClientId);
-        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, Class.forName(keySerializer));
-        return props;
-    }
-    
-    @Bean
-    public ProducerFactory<Object, Object> kafkaProducerFactory() throws ClassNotFoundException {
-    	DefaultKafkaProducerFactory<Object, Object> pf=  new DefaultKafkaProducerFactory<>(producerConfigs());
-        pf.setProducerPerConsumerPartition(producerPerConsumerPartition);
-        pf.setTransactionIdPrefix(this.transactionIdPrefix);
-        return pf;
     }
 }

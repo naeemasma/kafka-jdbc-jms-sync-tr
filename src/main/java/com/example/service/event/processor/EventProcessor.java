@@ -181,9 +181,9 @@ public class EventProcessor {
 		  return factory; 
 	 }   
 	  
-	@KafkaListener(topics = "#{'${app.consumer.subscribed-to.topic}'.split(',')}", containerFactory="kafkaListenerContainerFactory", groupId = "${spring.kafka.consumer.group-id}")
+	@KafkaListener(topics = "#{'${app.consumer.subscribed-to.topic}'.split(',')}", containerFactory="kafkaListenerContainerFactory", groupId = "${spring.kafka.consumer.group-id}", properties="${app.consumer.props}")
 	public void consume(EventMessage eventMessage) throws Exception {
-	  logger.info(String.format("Consuming message: %s -kafkaTemplate: %s", 
+	  logger.info(String.format("Consuming message: %s - kafkaTemplate.TransactionIdPrefix: %s", 
 			  eventMessage.getDescription(), kafkaTemplate.getTransactionIdPrefix()));
 	  EventMessage msg = new EventMessage(eventMessage.getDescription()+"");
 	  eventMessageService.insert(msg);
